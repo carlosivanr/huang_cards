@@ -1,0 +1,294 @@
+---
+title: "Huang, Cards 2024"
+# format: 
+#   docx:
+#     reference-doc: "./custom-reference-doc.docx"
+
+format:
+  html:
+    embed-resources: true
+    toc: true
+
+execute: 
+  echo: false
+---
+
+```{python}
+# Needs Charts
+# Needs stratified responses
+```
+
+```{python}
+from redcap import Project
+from great_tables import GT, md, html
+from statsmodels.stats.weightstats import ttest_ind
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+```
+
+```{python}
+# Load the get api function
+import sys
+sys.path.append("../functions")
+from get_api_key import get_api_key
+```
+
+```{python}
+# pre data
+#| echo: false
+# Project_id = 26791
+api_url = 'https://redcap.ucdenver.edu/api/'
+api_key = get_api_key(26791)
+project = Project(api_url, api_key)
+pre = project.export_records()
+pre = pd.DataFrame.from_dict(pre)
+pre["timepoint"] = "pre"
+```
+
+```{python}
+# post data
+#| echo: false
+# Project_id = 26779
+api_url = 'https://redcap.ucdenver.edu/api/'
+api_key = get_api_key(26779)
+project = Project(api_url, api_key)
+post = project.export_records()
+post = pd.DataFrame.from_dict(post)
+post["timepoint"] = "post"
+```
+
+```{python}
+# Generate frequency and proportion of one column
+def freq_prop(df, col_name):
+    """ 2 Arguments: A Pandas data frame and a column name in 
+        the dataframe encased in quotes. Returns a GT object
+        with the n(%) values sorted descending.
+    """
+    # Get the total sample size
+    N = str(df.shape[0])
+
+    return(
+        GT(
+            pd.DataFrame(
+                (df[col_name].value_counts().astype(str)) +
+                ' (' +
+                (df[col_name].value_counts(normalize = True).mul(100).round(1).astype(str) + '%)'))
+            .reset_index()
+            .rename(columns = {0:("N = " + N)})
+            )
+            )
+```
+
+## Ethnicity
+```{python}
+# Recode numeric values to categorical
+pre['Ethnicity'] = pre['ethnicity'].replace({
+    '1':	'American Indian / Alaskan Native',
+    '2':	'Asian',
+    '3':	'Black or African American',
+    '4':	'Hispanic, Latinx or Spanish',
+    '5':	'Middle Eastern / Northern African',
+    '6':	'Pacific islander / Native Hawaiian',
+    '7':	'White',
+    '8':	'Prefer not to answer',
+    '9':	'Other'})
+
+# Create the basic table
+freq_prop(pre, "Ethnicity")
+```
+
+## Role
+```{python}
+pre['Role'] = pre['role'].replace({
+    '1':	'Student',
+    '2':	'Resident',
+    '3':	'Attending Physician',
+    '4':	'Advanced Practice Provider',
+    '5':	'Clinical Staff',
+    '6':	'Other'})
+
+# Create the basic table
+freq_prop(pre, "Role")
+```
+
+## Gender
+Categories with fewer than 5 responses were collapased into "Prefer not to answer/Other" to preserve anonymity.
+```{python}
+pre['Gender'] = pre['gender'].replace({
+    '1':	'Female',
+    '2':	'Male',
+    '3':	'Prefer not to answer/Other',
+    '4':	'Prefer not to answer/Other',
+    '5':	'Prefer not to answer/Other',
+    '6':	'Prefer not to answer/Other',
+    '7':    'Prefer not to answer/Other'})
+
+# Create the basic table
+freq_prop(pre, "Gender")
+```
+
+```{python}
+# Function to perform independent t-tests from the pre and post dataframes
+def test(col_1, col_2, label):
+    """ Arguments are the column name in the pre data set,
+        the column name in the post data set,
+        and the desired label for the returned data frame.
+    """
+    # Filter out any non numerical values
+    x1 = pre[col_1][pre[col_1] != ''].astype(int).to_numpy()
+    x2 = post[col_2][post[col_2] != ''].astype(int).to_numpy()
+    
+    # Collect results from t-test into a data frame
+    result = ttest_ind(
+    x2, 
+    x1,
+    alternative="two-sided",
+    usevar = "pooled",
+    weights = (None, None),
+    value = 0
+    )
+
+    # Return a data frame assembled from results
+    return(
+        pd.DataFrame.from_dict(
+            {
+            "Question":     [label],
+            "Mean Pre":     [x1.mean().round(2)],
+            "N Pre":        [np.count_nonzero(x1)],
+            "Mean Post":    [x2.mean().round(2)],
+            "N Post":       [np.count_nonzero(x2)], 
+            "Tstat":        [result[0].round(2)],
+            "Pval":         [result[1].round(2)],
+            "df":           [result[2]],
+            }
+        ).set_index("Question")
+    )
+```
+
+## Confidence in ability to intervene
+- Pre: How confident are you in your ability to intervene when witnessing microaggressions or bias?
+- Post: After completing the Cards for Humanity activity, how confident are you in your ability to intervene when witnessing microaggressions or bias?
+
+```{python}
+# Display the scoring system
+responses = GT(pd.DataFrame({"Value": [1, 2, 3, 4],
+              "Response": ["Not at all confident",
+                           "Slightly confident",
+                           "Moderately confident",
+                           "Very confident"]})
+            .set_index("Value")
+            .reset_index()
+)
+responses
+```
+
+```{python}
+h1 = test("witness_microaggression", 
+     "confident_intervene",
+     "Confidence in ability to intervene")
+h1
+```
+
+```{python}
+# Define a function to stack data, coalese, and rename for plotting
+def plot(col_1, col_2):
+
+    # Stack the two data frames
+    df = pd.concat([pre[[col_1, "timepoint"]], 
+                    post[[col_2, "timepoint"]]])
+    
+    # Remove nulls
+    df = df[df[col_1] != '']
+    df = df[df[col_2] != '']
+
+    # Coalese the dependent variable into one column
+    df["value"] = df[col_1].combine_first(df[col_2]).astype(int)
+
+    ax = sns.barplot(df, x = "timepoint", y="value")
+    ax.set(xlabel = "Timepoint", ylabel = "Mean Response")
+    ax.set(ylim=(1, 4))
+    plt.show()
+```
+
+```{python}
+plot("witness_microaggression", "confident_intervene")
+```
+
+## Likeliness of intervening
+- Pre: How likely are you to intervene when you witness microaggressions or bias?
+- Post: After completing the Cards for Humanity activity, how likely are you to intervene when you witness microaggressions or bias?
+
+```{python}
+# Display the response key
+responses
+```
+
+```{python}
+# table 
+test("likely_to_witness", 
+     "likely_intervene", 
+     "How likely to intervene")
+```
+
+```{python}
+plot("likely_to_witness", "likely_intervene")
+```
+
+## Effectiveness of Cards activity
+How effective was the Cards for Humanity activity in giving you tools to become an upstander?
+```{python}
+GT(pd.DataFrame({"Value": [1, 2, 3, 4],
+              "Response": ["Not at all effective",
+                           "Slightly effective",
+                           "Moderately effective",
+                           "Very effective"]})
+            .set_index("Value")
+            .reset_index()
+)
+```
+
+```{python}
+summary = pd.DataFrame(
+    {
+        "N":       [post["effective_post"].astype(int).count()],
+        "Mean":    [post["effective_post"].astype(int).mean().round(2)],
+        "Std":     [post["effective_post"].astype(int).std().round(2)]
+    }
+)
+
+blank_index=[''] * len(summary)
+summary.index=blank_index
+summary
+```
+
+```{python}
+# Clean up some of the free text responses
+post['Free_text_responses'] = post['commitment'].replace({'n/a':    [None],
+              'N/a':    [None],
+              '     ':  [None],
+              'Abdhdg': [None],
+              '':       [None],
+              'NA':     [None],
+              'None':   [None],
+              'N/A':    [None],
+              'No':     [None],
+              'no':     [None],
+              'Na':     [None],
+              '.':      [None],
+              'none':   [None],
+              'NA ':    [None],
+              '. ':     [None],
+              "-":      [None],
+              ' ':      [None],
+              ', ':     [None]
+              })
+              
+ 
+# Print free responses to a .csv file
+(pd.DataFrame(post['Free_text_responses']
+.unique())
+.to_csv("../data/free_text_responses.csv", index = False)
+)
+```
