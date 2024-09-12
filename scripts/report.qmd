@@ -26,21 +26,23 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import sys
 ```
 
 ```{python}
-# Load the get api function
-import sys
+# Set the path to custom functions
 sys.path.append("../functions")
+
+# Load the get api function
+# Prevents RedCap credentials from getting uploaded to github
 from get_api_key import get_api_key
 ```
 
 ```{python}
-# pre data
-#| echo: false
-# Project_id = 26791
+# Get pre data
+# Project_id = 26779
 api_url = 'https://redcap.ucdenver.edu/api/'
-api_key = get_api_key(26791)
+api_key = get_api_key(26779)
 project = Project(api_url, api_key)
 pre = project.export_records()
 pre = pd.DataFrame.from_dict(pre)
@@ -48,11 +50,10 @@ pre["timepoint"] = "pre"
 ```
 
 ```{python}
-# post data
-#| echo: false
-# Project_id = 26779
+# Get post data
+# Project_id = 26791
 api_url = 'https://redcap.ucdenver.edu/api/'
-api_key = get_api_key(26779)
+api_key = get_api_key(26791)
 project = Project(api_url, api_key)
 post = project.export_records()
 post = pd.DataFrame.from_dict(post)
@@ -60,7 +61,7 @@ post["timepoint"] = "post"
 ```
 
 ```{python}
-# Generate frequency and proportion of one column
+# Define a function that generates frequency and proportions of one column
 def freq_prop(df, col_name):
     """ 2 Arguments: A Pandas data frame and a column name in 
         the dataframe encased in quotes. Returns a GT object
@@ -129,8 +130,18 @@ pre['Gender'] = pre['gender'].replace({
 freq_prop(pre, "Gender")
 ```
 
+<!-- # Tables Pre -->
 ```{python}
-# Function to perform independent t-tests from the pre and post dataframes
+# freq_prop(pre, "definition_and_pre")
+```
+
+<!-- # Tables Post -->
+```{python}
+```
+
+# Analyses
+```{python}
+# Define a function to perform independent t-tests from the pre and post dataframes
 def test(col_1, col_2, label):
     """ Arguments are the column name in the pre data set,
         the column name in the post data set,
@@ -167,9 +178,94 @@ def test(col_1, col_2, label):
     )
 ```
 
+```{python}
+#| eval: true
+# Prepare a data frame for q1 and q2 
+df = pd.concat(
+    [pd.concat([
+        pre[["timepoint", "witness_microaggression"]].rename(columns = {"witness_microaggression": "q1"}),
+        post[["timepoint", "confident_intervene"]].rename(columns = {"confident_intervene": "q1"})]),
+    pd.concat([
+        pre[["likely_to_witness"]].rename(columns = {"likely_to_witness": "q2"}),
+        post[["likely_intervene"]].rename(columns = {"likely_intervene": "q2"})])],
+    axis = 1
+)
+
+df = df.melt(id_vars = "timepoint",
+        value_vars = ["q1", "q2"],
+        var_name = "question",
+        value_name = "response"
+        )
+
+dict = {'1': 'Not at all likely',
+    '2': 'Slightly likely',
+    '3': 'Moderately likely',
+    '4': 'Very likely',
+    '': None}
+
+df["response"] = df["response"].replace(dict)
+
+df = df.dropna()
+
+df["timepoint"] = pd.Categorical(df.timepoint,
+                                 categories = ["pre", "post"],
+                                 ordered = True)
+
+df["response"] = pd.Categorical(df.response,
+                                categories = ['Not at all likely',
+                                              'Slightly likely',
+                                              'Moderately likely',
+                                              'Very likely'],
+                                ordered = True)
+
+# Generate a horizontal table
+# pd.crosstab(
+#     df.question, 
+#     columns = [df.timepoint, df.response]).apply(
+#         lambda row: round((row/row.sum())*100, 2).astype(str) +'%', 
+#         axis = 1)
+```
+
+
 ## Confidence in ability to intervene
 - Pre: How confident are you in your ability to intervene when witnessing microaggressions or bias?
 - Post: After completing the Cards for Humanity activity, how confident are you in your ability to intervene when witnessing microaggressions or bias?
+
+```{python}
+# q1 = df[df['question'] == 'q1']
+
+# pd.crosstab(
+#     q1.response,
+#     columns = [df.timepoint])
+
+# (pd.crosstab(
+#     q1.response,
+#     q1.timepoint,
+#     normalize = 'index'
+#     ) * 100).round(2).astype(str) + "%"
+```
+
+```{python}
+# Define a function that generates frequency and proportions of one column
+def pre_post(question):
+    """ Outputs a table of pre vs post resonses as proportions
+        1 argument specifying either q1 or q2 as those are the 
+        ony questions of interest.
+    """
+    temp = df[df['question'] == question]
+    return(
+    (pd.crosstab(
+        temp.response,
+        temp.timepoint,
+        normalize = 'index'
+        ) * 100).round(2).astype(str) + "%"
+    )
+```
+
+```{python}
+pre_post('q1')
+```
+
 
 ```{python}
 # Display the scoring system
@@ -219,6 +315,10 @@ plot("witness_microaggression", "confident_intervene")
 ## Likeliness of intervening
 - Pre: How likely are you to intervene when you witness microaggressions or bias?
 - Post: After completing the Cards for Humanity activity, how likely are you to intervene when you witness microaggressions or bias?
+
+```{python}
+pre_post('q2')
+```
 
 ```{python}
 # Display the response key
@@ -291,4 +391,55 @@ post['Free_text_responses'] = post['commitment'].replace({'n/a':    [None],
 .unique())
 .to_csv("../data/free_text_responses.csv", index = False)
 )
+```
+
+```{python}
+#| eval: false
+# Chi square test
+# Pre vs post
+dict = {'1': 'Not at all likely',
+    '2': 'Slightly likely',
+    '3': 'Moderately likely',
+    '4': 'Very likely',
+    '': None}
+
+pre["Q1_pre"] = pre["likely_to_witness"].replace(dict)
+
+post["Q1_post"] = post["likely_intervene"].replace(dict)
+
+
+data = [[pre["Q1_pre"].dropna().value_counts().sort_index().to_numpy()],
+        [post["Q1_post"].dropna().value_counts().sort_index().to_numpy()]]
+
+data = [[90, 15, 99, 13], [112, 2, 20, 60]]
+
+```
+
+```{python}
+# from scipy.stats import chi2_contingency
+# # The values in data can be a list or an array
+# # output the test stat, p, dof, expected
+# stat, p, dof, expected = chi2_contingency(data)
+```
+
+```{python}
+# need a table where the Column A is Pre, Column B is Post
+#  Variable                     Pre N       Post N   P-Value
+#  Question                                         p_val
+#          not at all likeley   n(%)         n(%)
+# 4 rows   slightly likely      n(%)         n(%)
+#          moderately likely    n(%)         n(%)
+#          very likeley         n(%)         n(%)
+```
+
+```{python}
+# a = np.array(["foo", "foo", "foo", "foo", "bar", "bar",
+#               "bar", "bar", "foo", "foo", "foo"], dtype=object)
+# b = np.array(["one", "one", "one", "two", "one", "one",
+#               "one", "two", "two", "two", "one"], dtype=object)
+# c = np.array(["dull", "dull", "shiny", "dull", "dull", "shiny",
+#               "shiny", "dull", "shiny", "shiny", "shiny"],
+#              dtype=object)
+
+# test = [b, c]
 ```
