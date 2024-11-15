@@ -4,6 +4,7 @@ title: "Huang, Cards 2024"
 # format: 
 #   docx:
 #     reference-doc: "./custom-reference-doc.docx"
+#     fig-dpi: 600
 
 format:
   html:
@@ -126,27 +127,6 @@ pre['Gender'] = pre['gender'].replace({
 freq_prop(pre, "Gender")
 ```
 
-```{python}
-# Define a function to stack data, coalese, and rename for plotting
-def plot(col_1, col_2):
-    # Stack the two data frames
-    df = pd.concat([pre[[col_1, "timepoint"]], 
-                    post[[col_2, "timepoint"]]])
-    
-    # Remove nulls
-    df = df[df[col_1] != '']
-    df = df[df[col_2] != '']
-
-    # Coalese the dependent variable into one column
-    df["value"] = df[col_1].combine_first(df[col_2]).astype(int)
-
-    ax = sns.barplot(df, x = "timepoint", y="value", alpha=.8)
-    ax.set(xlabel = "Timepoint", ylabel = "Mean Response")
-    ax.set(ylim=(1, 4))
-    sns.despine(bottom = False, left = False, top = True, right = True)
-    plt.show()
-```
-
 # Analyses
 ```{python}
 #| eval: true
@@ -206,6 +186,49 @@ df["response"] = pd.Categorical(
     ordered = True)
 ```
 
+
+
+```{python}
+# Define a function that generates frequency and proportions of one column
+def pre_post_tab(question):
+    """ Returns a pandas crosstab in proportions of the response of a 
+    categorical variable by timepoint. 
+    
+    Requires a prepped data frame called df specifically crafted for the
+    Huang, Cards 2024 survey 
+    Keyword arguments:
+    question -- a character string specifying either 'q1' or 'q2'
+    """
+    temp = df[df['question'] == question]
+    return(
+    (pd.crosstab(
+        temp.response,
+        temp.timepoint,
+        normalize = 'index'
+        ) * 100).round(2).astype(str) + "%"
+    )
+```
+
+## Confidence in ability to intervene
+- Pre: How confident are you in your ability to intervene when witnessing microaggressions or bias?
+- Post: After completing the Cards for Humanity activity, how confident are you in your ability to intervene when witnessing microaggressions or bias?
+```{python}
+#| eval: false
+pre_post_tab('q1')
+```
+
+```{python}
+# Display the scoring system
+GT(pd.DataFrame({"Value": [1, 2, 3, 4],
+              "Response": ["Not at all confident",
+                           "Slightly confident",
+                           "Moderately confident",
+                           "Very confident"]})
+            .set_index("Value")
+            .reset_index()
+)
+```
+
 ```{python}
 # Define a function to perform independent t-tests from the pre and post dataframes
 def test(col_1, col_2, label):
@@ -252,50 +275,30 @@ def test(col_1, col_2, label):
 ```
 
 ```{python}
-# Define a function that generates frequency and proportions of one column
-def pre_post_tab(question):
-    """ Returns a pandas crosstab in proportions of the response of a 
-    categorical variable by timepoint. 
-    
-    Requires a prepped data frame called df specifically crafted for the
-    Huang, Cards 2024 survey 
-    Keyword arguments:
-    question -- a character string specifying either 'q1' or 'q2'
-    """
-    temp = df[df['question'] == question]
-    return(
-    (pd.crosstab(
-        temp.response,
-        temp.timepoint,
-        normalize = 'index'
-        ) * 100).round(2).astype(str) + "%"
-    )
-```
-
-## Confidence in ability to intervene
-- Pre: How confident are you in your ability to intervene when witnessing microaggressions or bias?
-- Post: After completing the Cards for Humanity activity, how confident are you in your ability to intervene when witnessing microaggressions or bias?
-```{python}
-#| eval: false
-pre_post_tab('q1')
-```
-
-```{python}
-# Display the scoring system
-GT(pd.DataFrame({"Value": [1, 2, 3, 4],
-              "Response": ["Not at all confident",
-                           "Slightly confident",
-                           "Moderately confident",
-                           "Very confident"]})
-            .set_index("Value")
-            .reset_index()
-)
-```
-
-```{python}
 test("witness_microaggression", 
      "confident_intervene",
      "Confidence in ability to intervene")
+```
+
+```{python}
+# Define a function to stack data, coalese, and rename for plotting
+def plot(col_1, col_2):
+    # Stack the two data frames
+    df = pd.concat([pre[[col_1, "timepoint"]], 
+                    post[[col_2, "timepoint"]]])
+    
+    # Remove nulls
+    df = df[df[col_1] != '']
+    df = df[df[col_2] != '']
+
+    # Coalese the dependent variable into one column
+    df["value"] = df[col_1].combine_first(df[col_2]).astype(int)
+
+    ax = sns.barplot(df, x = "timepoint", y="value", alpha=.8)
+    ax.set(xlabel = "Timepoint", ylabel = "Mean Response")
+    ax.set(ylim=(1, 4))
+    sns.despine(bottom = False, left = False, top = True, right = True)
+    plt.show()
 ```
 
 ```{python}
