@@ -1,15 +1,15 @@
 ---
 title: "Huang, Cards 2024"
 
-# format: 
-#   docx:
-#     reference-doc: "./custom-reference-doc.docx"
-#     fig-dpi: 600
+format: 
+  docx:
+    reference-doc: "./custom-reference-doc.docx"
+    fig-dpi: 600
 
-format:
-  html:
-    embed-resources: true
-    toc: true
+# format:
+#   html:
+#     embed-resources: true
+#     toc: true
 
 execute: 
   echo: false
@@ -263,9 +263,11 @@ def test(col_1, col_2, label):
             "N Pre":        [np.count_nonzero(x1)],
             "Mean Pre":     [x1.mean().round(2)],
             "Std Pre":      [x1.std().round(2)],
+            "SE Pre":       [(x1.std()/np.sqrt(np.count_nonzero(x1))).round(2)],
             "N Post":       [np.count_nonzero(x2)], 
             "Mean Post":    [x2.mean().round(2)],
             "Std Post":     [x2.std().round(2)],
+            "SE Post":      [(x2.std()/np.sqrt(np.count_nonzero(x2))).round(2)],
             "Tstat":        [result[0].round(2)],
             "Pval":         [result[1].round(2)],
             "df":           [result[2]],
@@ -294,7 +296,7 @@ def plot(col_1, col_2):
     # Coalese the dependent variable into one column
     df["value"] = df[col_1].combine_first(df[col_2]).astype(int)
 
-    ax = sns.barplot(df, x = "timepoint", y="value", alpha=.8)
+    ax = sns.barplot(df, x = "timepoint", y="value", alpha=.8, errorbar = 'se')
     ax.set(xlabel = "Timepoint", ylabel = "Mean Response")
     ax.set(ylim=(1, 4))
     sns.despine(bottom = False, left = False, top = True, right = True)
